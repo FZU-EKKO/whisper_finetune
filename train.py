@@ -87,7 +87,7 @@ def main():
     if device == "cpu":
         print("⚠️  CPU 训练会很慢！")
     else:
-        print(f"🖥  GPU: {torch.cuda.get_device_name(0)} ({torch.cuda.get_device_properties(0).total_mem/1e9:.1f} GB)")
+        print(f"🖥  GPU: {torch.cuda.get_device_name(0)} ({torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB)")
 
     # 模型 & Processor
     model_dir = args.model_dir
