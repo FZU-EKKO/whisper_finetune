@@ -1,0 +1,15 @@
+# 原始模型 & LoRA checkpoint
+whisper-large-v3/
+checkpoint/
+
+# 训练日志 & 缓存
+logs/
+__pycache__/
+*.pyc
+
+# 输出图片
+training_curve.png
+
+# 系统文件
+.DS_Store
+Thumbs.db
