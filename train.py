@@ -2,13 +2,14 @@
 LoRA 微调 Whisper-large-v3 for 中文游戏语音识别
 
 用法:
+    python download_model.py                  # 1. 先下载模型
     pip install -r requirements.txt
-    python train.py                          # 默认参数训练
+    python train.py                           # 2. 训练
     python train.py --epochs 10 --batch_size 16 --save_merged
 """
-import os, json, argparse, warnings
+import os, json, argparse
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import List
 
 import torch, evaluate
 from datasets import Dataset, Audio
@@ -18,8 +19,8 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model, TaskType, PeftModel
 
-# ── 常量 ──────────────────────────────────────────────
-MODEL_ID = "openai/whisper-large-v3"
+# ── 本地路径 ──────────────────────────────────────────
+MODEL_DIR = "./whisper-large-v3"
 LANGUAGE, TASK = "zh", "transcribe"
 TARGET_MODULES = ["q_proj", "v_proj", "out_proj"]
 
@@ -63,26 +64,10 @@ def load_data(metadata: str, processor: WhisperProcessor, max_samples: int = Non
                   remove_columns=ds.column_names, desc="预处理")
 
 
-# ── 模型查找 ──────────────────────────────────────────
-def resolve_model(model_id: str) -> str:
-    """优先本地: ./whisper-large-v3 → HF缓存 → 在线下载"""
-    if os.path.isdir(model_id):
-        return model_id
-    for path in ["whisper-large-v3", "../whisper-large-v3"]:
-        if os.path.isdir(path) and os.path.isfile(f"{path}/config.json"):
-            return path
-    import glob as g
-    snap = os.path.expanduser("~/.cache/huggingface/hub/models--openai--whisper-large-v3/snapshots")
-    if os.path.isdir(snap):
-        dirs = sorted(g.glob(f"{snap}/*"))
-        if dirs: return dirs[-1]
-    return model_id
-
-
 # ── 主函数 ────────────────────────────────────────────
 def main():
     p = argparse.ArgumentParser(description="LoRA 微调 Whisper-large-v3")
-    p.add_argument("--model_id", default=MODEL_ID)
+    p.add_argument("--model_dir", default=MODEL_DIR, help="本地模型目录")
     p.add_argument("--metadata", default="./metadata.jsonl")
     p.add_argument("--output_dir", default="./checkpoint")
     p.add_argument("--epochs", type=int, default=10)
@@ -105,9 +90,11 @@ def main():
         print(f"🖥  GPU: {torch.cuda.get_device_name(0)} ({torch.cuda.get_device_properties(0).total_mem/1e9:.1f} GB)")
 
     # 模型 & Processor
-    model_path = resolve_model(args.model_id)
-    print(f"\n📦 模型: {model_path}")
-    processor = WhisperProcessor.from_pretrained(model_path, language=LANGUAGE, task=TASK)
+    model_dir = args.model_dir
+    if not os.path.isdir(model_dir):
+        exit(f"❌ 模型不存在: {model_dir}，请先运行 python download_model.py")
+    print(f"\n📦 模型: {model_dir}")
+    processor = WhisperProcessor.from_pretrained(model_dir, language=LANGUAGE, task=TASK)
 
     # 数据
     print("\n📂 加载数据...")
@@ -117,7 +104,7 @@ def main():
 
     # 模型 + LoRA
     print("\n🤖 加载模型 + LoRA...")
-    model = WhisperForConditionalGeneration.from_pretrained(model_path)
+    model = WhisperForConditionalGeneration.from_pretrained(model_dir)
     for p in model.parameters():
         p.requires_grad = False
     model = get_peft_model(model, LoraConfig(
@@ -175,7 +162,7 @@ def main():
     # 合并模型
     if args.save_merged:
         print("\n🔗 合并模型 → ./merged")
-        base = WhisperForConditionalGeneration.from_pretrained(model_path)
+        base = WhisperForConditionalGeneration.from_pretrained(model_dir)
         m = PeftModel.from_pretrained(base, args.output_dir).merge_and_unload()
         m.save_pretrained("./merged")
         processor.save_pretrained("./merged")

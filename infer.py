@@ -11,12 +11,12 @@ import torch, librosa
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 from peft import PeftModel
 
-MODEL_ID = "openai/whisper-large-v3"
+MODEL_DIR = "./whisper-large-v3"
 
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model_id", default=MODEL_ID)
+    p.add_argument("--model_dir", default=MODEL_DIR, help="本地模型目录")
     p.add_argument("--lora", default="./checkpoint")
     p.add_argument("--audio", default=None)
     p.add_argument("--dir", default=None)
@@ -30,20 +30,19 @@ def main():
     print(f"🖥  设备: {device}")
 
     # 加载模型
-    model_path = args.model_id
-    for path in ["whisper-large-v3", "../whisper-large-v3"]:
-        if os.path.isdir(path) and os.path.isfile(f"{path}/config.json"):
-            model_path = path; break
+    model_dir = args.model_dir
+    if not os.path.isdir(model_dir):
+        exit(f"❌ 模型不存在: {model_dir}，请先运行 python download_model.py")
 
-    print(f"📦 模型: {model_path}")
-    model = WhisperForConditionalGeneration.from_pretrained(model_path)
+    print(f"📦 模型: {model_dir}")
+    model = WhisperForConditionalGeneration.from_pretrained(model_dir)
     if os.path.isdir(args.lora):
         print(f"🔗 LoRA: {args.lora}")
         model = PeftModel.from_pretrained(model, args.lora).merge_and_unload()
     model.to(device).eval()
 
     processor = WhisperProcessor.from_pretrained(
-        args.lora if os.path.isdir(args.lora) else model_path,
+        args.lora if os.path.isdir(args.lora) else model_dir,
         language="zh", task="transcribe")
 
     # 推理函数
