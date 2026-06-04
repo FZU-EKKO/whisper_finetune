@@ -1,11 +1,10 @@
 """
-下载 Whisper-large-v3 到本地目录
+Download Whisper-large-v3 to local directory.
 
-用法:
-    # 国内必须走镜像！
-    export HF_ENDPOINT=https://hf-mirror.com
-    python download_model.py                    # 下载到 ./whisper-large-v3/
-    python download_model.py --dir /data/model   # 指定目录
+Usage:
+    export HF_ENDPOINT=https://hf-mirror.com   # China mirror
+    python download_model.py
+    python download_model.py --dir /data/model
 """
 import argparse, os
 
@@ -13,19 +12,19 @@ MODEL_ID = "openai/whisper-large-v3"
 
 
 def main():
-    p = argparse.ArgumentParser(description="下载 Whisper-large-v3")
-    p.add_argument("--dir", default="./whisper-large-v3", help="保存目录")
+    p = argparse.ArgumentParser(description="Download Whisper-large-v3")
+    p.add_argument("--dir", default="./whisper-large-v3")
     args = p.parse_args()
 
     if "HF_ENDPOINT" not in os.environ:
-        print("❌ 未设置镜像！国内服务器请先执行:")
-        print("   export HF_ENDPOINT=https://hf-mirror.com\n")
-        if input("继续尝试直连下载? (y/n): ").strip().lower() != "y":
+        print("WARNING: HF_ENDPOINT not set. In China, set it first:")
+        print("  export HF_ENDPOINT=https://hf-mirror.com\n")
+        if input("Continue without mirror? (y/n): ").strip().lower() != "y":
             return
     else:
-        print(f"🌐 镜像: {os.environ['HF_ENDPOINT']}")
+        print(f"Mirror: {os.environ['HF_ENDPOINT']}")
 
-    print(f"⬇️  下载 {MODEL_ID} → {args.dir}")
+    print(f"Downloading {MODEL_ID} -> {args.dir}")
 
     from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
@@ -35,7 +34,7 @@ def main():
     model.save_pretrained(args.dir)
     processor.save_pretrained(args.dir)
 
-    print(f"✅ 完成! 模型已保存到 {os.path.abspath(args.dir)}")
+    print(f"Done! Model saved to {os.path.abspath(args.dir)}")
 
 
 if __name__ == "__main__":
