@@ -235,7 +235,7 @@ def main():
     # 训练参数
     training_args = Seq2SeqTrainingArguments(
         output_dir=args.output_dir,
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         eval_steps=args.eval_steps,
         save_steps=args.eval_steps,
         logging_steps=args.logging_steps,
@@ -257,8 +257,7 @@ def main():
         remove_unused_columns=False,
         dataloader_num_workers=4,
         report_to=["tensorboard"],
-        gradient_checkpointing=True,  # 节省显存
-        group_by_length=True,  # 提高效率
+        gradient_checkpointing=True,
     )
     
     trainer = Seq2SeqTrainer(
