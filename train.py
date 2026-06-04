@@ -35,7 +35,6 @@ TARGET_MODULES = ["q_proj", "v_proj", "k_proj", "out_proj"]
 class DataCollatorSpeechSeq2SeqWithPadding:
     """数据整理器 - 正确处理 Whisper 的输入格式"""
     processor: Any
-    decoder_start_token_id: int
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
         # 分离输入特征和标签
@@ -105,8 +104,8 @@ def load_dataset(metadata_path: str, processor: WhisperProcessor, max_samples: i
         ).input_ids
         
         return {
-            "input_features": inputs.input_features[0],
-            "labels": labels[0]
+            "input_features": list(inputs.input_features),
+            "labels": list(labels)
         }
     
     # 应用预处理
@@ -115,28 +114,11 @@ def load_dataset(metadata_path: str, processor: WhisperProcessor, max_samples: i
         remove_columns=dataset.column_names,
         batched=True,
         batch_size=32,
-        num_proc=4
+        num_proc=1
     )
     
     # 分割训练集和验证集
     return dataset.train_test_split(test_size=0.1, seed=42)
-
-
-class CustomSeq2SeqTrainer(Seq2SeqTrainer):
-    """自定义 Trainer 来处理 PEFT 和 Whisper 的兼容性问题"""
-    
-    def training_step(self, model, inputs, num_items_in_batch=None):
-        """重写训练步骤，确保参数正确传递"""
-        # 移除可能的 input_ids
-        inputs.pop("input_ids", None)
-        inputs.pop("decoder_input_ids", None)
-        return super().training_step(model, inputs, num_items_in_batch)
-    
-    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
-        """重写预测步骤"""
-        inputs.pop("input_ids", None)
-        inputs.pop("decoder_input_ids", None)
-        return super().prediction_step(model, inputs, prediction_loss_only, ignore_keys)
 
 
 def main():
@@ -210,12 +192,26 @@ def main():
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Trainable params: {trainable_params:,} ({trainable_params/total_params:.2f}% of {total_params:,})")
+
+    # PEFT 内部会强传 input_ids 给 base_model，Whisper 只吃 input_features+labels
+    class Wrap(nn.Module):
+        def __init__(self, m):
+            super().__init__()
+            self._m = m
+
+        def forward(self, input_features=None, labels=None, **kw):
+            return self._m(input_features=input_features, labels=labels)
+
+        def __getattr__(self, name):
+            try:
+                return super().__getattr__(name)
+            except AttributeError:
+                return getattr(self._m, name)
+
+    model = Wrap(model)
     
     # 数据整理器
-    data_collator = DataCollatorSpeechSeq2SeqWithPadding(
-        processor=processor,
-        decoder_start_token_id=model.config.decoder_start_token_id,
-    )
+    data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
     
     # WER 评估
     wer_metric = evaluate.load("wer")
@@ -265,8 +261,7 @@ def main():
         group_by_length=True,  # 提高效率
     )
     
-    # 创建 trainer（使用自定义的）
-    trainer = CustomSeq2SeqTrainer(
+    trainer = Seq2SeqTrainer(
         model=model,
         args=training_args,
         train_dataset=dataset["train"],
