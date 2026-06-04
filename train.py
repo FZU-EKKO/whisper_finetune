@@ -50,23 +50,21 @@ def load_data(metadata: str, processor: WhisperProcessor, max_samples: int = Non
         data = data[:max_samples]
     print(f"  加载 {len(data)} 条数据")
 
-    # 预加载全部音频为 numpy 数组，避免依赖 torchcodec
-    rows = []
-    for item in data:
-        audio, sr = soundfile.read(item["audio_filepath"])
-        if sr != 16000:
-            import librosa
-            audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
-        rows.append({"audio": audio, "sentence": item["text"]})
-    print(f"  音频加载完成")
-
-    ds = Dataset.from_list(rows)
+    ds = Dataset.from_list(data)
 
     def preprocess(batch):
+        # 逐条读 WAV → log-mel 频谱 + token 标签
+        audios = []
+        for path in batch["audio_filepath"]:
+            audio, sr = soundfile.read(path)
+            if audio.ndim > 1:
+                audio = audio[:, 0]
+            audios.append(audio)
+
         feats = processor.feature_extractor(
-            batch["audio"], sampling_rate=16000, return_tensors="np")
+            audios, sampling_rate=16000, return_tensors="np")
         labels = processor.tokenizer(
-            batch["sentence"], return_tensors="np").input_ids
+            batch["text"], return_tensors="np").input_ids
         return {"input_features": list(feats.input_features), "labels": list(labels)}
 
     return ds.map(preprocess, batched=True, batch_size=32,
@@ -133,7 +131,7 @@ def main():
         warmup_steps=args.warmup,
         num_train_epochs=args.epochs,
         fp16=(device == "cuda"),
-        evaluation_strategy="steps", eval_steps=200,
+        eval_strategy="steps", eval_steps=200,
         save_strategy="steps", save_steps=200,
         logging_steps=50, save_total_limit=3,
         load_best_model_at_end=True,
