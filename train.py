@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import List
 
 import torch, evaluate, soundfile
+import torch.nn as nn
 from datasets import Dataset
 from transformers import (
     WhisperProcessor, WhisperForConditionalGeneration,
@@ -122,6 +123,23 @@ def main():
         bias="none", task_type=TaskType.SEQ_2_SEQ_LM,
     ))
     model.print_trainable_parameters()
+
+    # PEFT forward 会强制传 input_ids，Whisper 只认 input_features + labels
+    class Wrap(nn.Module):
+        def __init__(self, m):
+            super().__init__()
+            self._m = m
+
+        def forward(self, input_features=None, labels=None, **kw):
+            return self._m(input_features=input_features, labels=labels)
+
+        def __getattr__(self, name):
+            try:
+                return super().__getattr__(name)
+            except AttributeError:
+                return getattr(self._m, name)
+
+    model = Wrap(model)
 
     # Training args
     train_args = Seq2SeqTrainingArguments(
