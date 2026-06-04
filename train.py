@@ -11,8 +11,8 @@ import os, json, argparse
 from dataclasses import dataclass
 from typing import List
 
-import torch, evaluate
-from datasets import Dataset, Audio
+import torch, evaluate, soundfile
+from datasets import Dataset
 from transformers import (
     WhisperProcessor, WhisperForConditionalGeneration,
     Seq2SeqTrainingArguments, Seq2SeqTrainer,
@@ -50,14 +50,23 @@ def load_data(metadata: str, processor: WhisperProcessor, max_samples: int = Non
         data = data[:max_samples]
     print(f"  加载 {len(data)} 条数据")
 
-    ds = Dataset.from_list(data)
-    ds = ds.cast_column("audio_filepath", Audio(sampling_rate=16000))
-    ds = ds.rename_column("audio_filepath", "audio").rename_column("text", "sentence")
+    # 预加载全部音频为 numpy 数组，避免依赖 torchcodec
+    rows = []
+    for item in data:
+        audio, sr = soundfile.read(item["audio_filepath"])
+        if sr != 16000:
+            import librosa
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
+        rows.append({"audio": audio, "sentence": item["text"]})
+    print(f"  音频加载完成")
+
+    ds = Dataset.from_list(rows)
 
     def preprocess(batch):
-        audio = [x["array"] for x in batch["audio"]]
-        feats = processor.feature_extractor(audio, sampling_rate=16000, return_tensors="np")
-        labels = processor.tokenizer(batch["sentence"], return_tensors="np").input_ids
+        feats = processor.feature_extractor(
+            batch["audio"], sampling_rate=16000, return_tensors="np")
+        labels = processor.tokenizer(
+            batch["sentence"], return_tensors="np").input_ids
         return {"input_features": list(feats.input_features), "labels": list(labels)}
 
     return ds.map(preprocess, batched=True, batch_size=32,
