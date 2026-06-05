@@ -71,7 +71,7 @@ def main():
     p.add_argument("--metadata", default="./metadata.jsonl")
     p.add_argument("--output_dir", default="./whisper-lora-checkpoint")
     p.add_argument("--epochs", type=int, default=10)
-    p.add_argument("--batch_size", type=int, default=8)
+    p.add_argument("--batch_size", type=int, default=4)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--warmup_steps", type=int, default=200)
     p.add_argument("--lora_r", type=int, default=16)
