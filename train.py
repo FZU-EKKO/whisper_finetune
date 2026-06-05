@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Any
 
 import torch
-import torch.nn as nn
+
 import evaluate
 import soundfile as sf
 from datasets import Dataset, DatasetDict
@@ -192,22 +192,6 @@ def main():
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Trainable params: {trainable_params:,} ({trainable_params/total_params:.2f}% of {total_params:,})")
 
-    # 防御：部分 PEFT 版本会强传 input_ids，Whisper 仅接受 input_features+labels
-    class Wrap(nn.Module):
-        def __init__(self, m):
-            super().__init__()
-            self._m = m
-
-        def forward(self, input_features=None, labels=None, **kw):
-            return self._m(input_features=input_features, labels=labels)
-
-        def __getattr__(self, name):
-            try:
-                return super().__getattr__(name)
-            except AttributeError:
-                return getattr(self._m, name)
-
-    model = Wrap(model)
     
     # 数据整理器
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
@@ -256,7 +240,7 @@ def main():
         remove_unused_columns=False,
         dataloader_num_workers=4,
         report_to=["tensorboard"],
-        gradient_checkpointing=True,
+
     )
     
     trainer = Seq2SeqTrainer(
