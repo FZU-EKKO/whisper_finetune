@@ -132,7 +132,7 @@ def main():
     # WER
     wer_metric = evaluate.load("wer")
 
-    def evaluate():
+    def eval_wer():
         model.eval()
         preds, refs = [], []
         with torch.no_grad():
@@ -176,7 +176,7 @@ def main():
                       f"lr {scheduler.get_last_lr()[0]:.2e}")
 
             if global_step % args.eval_steps == 0:
-                wer = evaluate()
+                wer = eval_wer()
                 print(f"  --- eval @ step {global_step} ---")
                 print(f"  WER: {wer:.4f}  (best: {best_wer:.4f})")
                 if wer < best_wer:
@@ -187,7 +187,7 @@ def main():
 
         elapsed = time.time() - t0
         avg_loss = epoch_loss / len(train_loader)
-        wer = evaluate()
+        wer = eval_wer()
         print(f"\nEpoch {epoch}/{args.epochs} | loss {avg_loss:.4f} | "
               f"WER {wer:.4f} | time {elapsed:.0f}s")
         if wer < best_wer:
