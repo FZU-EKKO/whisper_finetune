@@ -14,6 +14,7 @@ import torch.nn as nn
 import evaluate
 import soundfile as sf
 from datasets import Dataset, Audio
+import transformers
 from transformers import (
     WhisperProcessor, WhisperForConditionalGeneration,
     Seq2SeqTrainingArguments, Seq2SeqTrainer,
@@ -193,7 +194,15 @@ def main():
         tokenizer=processor.tokenizer,
     )
 
+    # 只保存 LoRA adapter，避免 Whisper 共享权重导致的 safetensors 报错
+    from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+    class SavePeftCallback(transformers.TrainerCallback):
+        def on_save(self, args, state, control, **kwargs):
+            ckpt_dir = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
+            kwargs["model"].save_pretrained(ckpt_dir)
+
     print("\nTraining...")
+    trainer.add_callback(SavePeftCallback())
     trainer.train()
 
     # 保存
