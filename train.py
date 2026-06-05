@@ -33,27 +33,18 @@ TARGET_MODULES = ["q_proj", "v_proj", "k_proj", "out_proj"]
 
 @dataclass
 class DataCollatorSpeechSeq2SeqWithPadding:
-    """数据整理器 - 正确处理 Whisper 的输入格式"""
     processor: Any
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
-        # 分离输入特征和标签
         input_features = [{"input_features": f["input_features"]} for f in features]
-        label_features = [f["labels"] for f in features]
-
-        # 对 input_features 进行 padding
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
 
-        # 对 labels 进行 padding
-        max_label_len = max(len(l) for l in label_features)
-        labels_padded = torch.full((len(label_features), max_label_len), -100, dtype=torch.long)
-        
-        for i, label in enumerate(label_features):
-            labels_padded[i, :len(label)] = torch.tensor(label, dtype=torch.long)
-
-        batch["labels"] = labels_padded
-        
-        # 关键：不返回 decoder_input_ids，让模型自己处理
+        label_features = [{"input_ids": f["labels"]} for f in features]
+        labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
+        labels = labels_batch["input_ids"].masked_fill(
+            labels_batch.attention_mask.ne(1), -100
+        )
+        batch["labels"] = labels
         return batch
 
 
@@ -163,17 +154,28 @@ def main():
     
     # 加载模型
     print(f"\nLoading model from {args.model_dir}...")
-    model = WhisperForConditionalGeneration.from_pretrained(args.model_dir)
-    
-    # 配置生成参数
-    model.config.forced_decoder_ids = None
-    model.config.suppress_tokens = []
-    model.config.use_cache = False  # 梯度检查点需要
-    
+    model = WhisperForConditionalGeneration.from_pretrained(
+        args.model_dir,
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+        low_cpu_mem_usage=True,
+    )
+
+    # 关键：让 encoder 输出保留梯度，否则 LoRA 的 encoder 部分不会被训练
+    model.model.encoder.conv1.register_forward_hook(
+        lambda m, inp, out: out.requires_grad_(True)
+    )
+
     # 冻结所有参数
     for param in model.parameters():
         param.requires_grad = False
-    
+
+    # 用 processor 生成正确的中文转录 prompt token
+    model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(
+        language=LANGUAGE, task=TASK
+    )
+    model.config.suppress_tokens = []
+    model.config.use_cache = False
+
     # 配置 LoRA
     print("\nSetting up LoRA...")
     lora_config = LoraConfig(
@@ -184,16 +186,13 @@ def main():
         bias="none",
         task_type=TaskType.SEQ_2_SEQ_LM,
     )
-    
-    # 应用 LoRA
     model = get_peft_model(model, lora_config)
-    
-    # 打印可训练参数
+
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Trainable params: {trainable_params:,} ({trainable_params/total_params:.2f}% of {total_params:,})")
 
-    # PEFT 内部会强传 input_ids 给 base_model，Whisper 只吃 input_features+labels
+    # 防御：部分 PEFT 版本会强传 input_ids，Whisper 仅接受 input_features+labels
     class Wrap(nn.Module):
         def __init__(self, m):
             super().__init__()
