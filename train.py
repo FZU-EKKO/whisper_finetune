@@ -54,11 +54,18 @@ class WhisperPeftModel(nn.Module):
         super().__init__()
         self._m = peft_model
 
-    def forward(self, input_features=None, labels=None, **kw):
-        return self._m.base_model(input_features=input_features, labels=labels, **kw)
+    def _cast(self, x):
+        if x is not None and x.dtype != self._m.base_model.dtype:
+            return x.to(self._m.base_model.dtype)
+        return x
 
-    def generate(self, *a, **kw):
-        return self._m.base_model.generate(*a, **kw)
+    def forward(self, input_features=None, labels=None, **kw):
+        return self._m.base_model(
+            input_features=self._cast(input_features), labels=labels, **kw)
+
+    def generate(self, input_features=None, **kw):
+        return self._m.base_model.generate(
+            input_features=self._cast(input_features), **kw)
 
     def save_pretrained(self, *a, **kw):
         return self._m.save_pretrained(*a, **kw)
