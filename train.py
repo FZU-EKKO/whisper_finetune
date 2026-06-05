@@ -73,9 +73,12 @@ class WhisperPeftModel(nn.Module):
     def merge_and_unload(self, *a, **kw):
         return self._m.merge_and_unload(*a, **kw)
 
-    @property
-    def config(self):
-        return self._m.config
+    def __getattr__(self, name):
+        # nn.Module 只处理参数/缓存/子模块，其余全部透传给 PEFT 模型
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self._m, name)
 
 
 # ── Data Collator ─────────────────────────────────────
