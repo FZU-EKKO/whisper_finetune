@@ -74,7 +74,7 @@ def main():
     p.add_argument("--batch_size", type=int, default=8)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--warmup_steps", type=int, default=200)
-    p.add_argument("--lora_r", type=int, default=32)
+    p.add_argument("--lora_r", type=int, default=16)
     p.add_argument("--lora_alpha", type=int, default=64)
     p.add_argument("--lora_dropout", type=float, default=0.05)
     p.add_argument("--eval_steps", type=int, default=500)
@@ -135,8 +135,8 @@ def main():
     to = sum(p.numel() for p in model.parameters())
     print(f"Trainable: {tr:,} / {to:,} ({100*tr/to:.2f}%)")
 
-    # 优化器 & 调度器
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    print("Setting up optimizer & metrics...")
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     total_steps = (len(train_loader) // 1) * args.epochs  # grad_accum=1
     warmup = args.warmup_steps
 
