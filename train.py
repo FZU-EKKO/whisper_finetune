@@ -159,7 +159,7 @@ def main():
                 labels = batch["labels"]
                 labels[labels == -100] = processor.tokenizer.pad_token_id
 
-                out = model.generate(feats, language=LANGUAGE, task=TASK, max_length=225)
+                out = model.base_model.generate(feats, language=LANGUAGE, task=TASK, max_length=225)
                 preds.extend(processor.tokenizer.batch_decode(out, skip_special_tokens=True))
                 refs.extend(processor.tokenizer.batch_decode(labels, skip_special_tokens=True))
         model.train()
@@ -180,8 +180,8 @@ def main():
             feats = batch["input_features"].to(device, dtype=model.dtype)
             labels = batch["labels"].to(device)
 
-            # PEFT 前向 —— 只传 input_features 和 labels，不传 input_ids
-            loss = model(input_features=feats, labels=labels).loss
+            # 直接调 base_model，绕过 PEFT forward 的 input_ids 参数
+            loss = model.base_model(input_features=feats, labels=labels).loss
 
             opt.zero_grad()
             loss.backward()
