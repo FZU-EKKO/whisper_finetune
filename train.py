@@ -111,16 +111,14 @@ def main():
     # 模型 + LoRA
     print(f"\nLoading model from {args.model_dir}...")
     model = WhisperForConditionalGeneration.from_pretrained(
-        args.model_dir, torch_dtype=torch.float16 if device.type == "cuda" else torch.float32,
+        args.model_dir,
         low_cpu_mem_usage=True)
 
     # Encoder 梯度 hook
     model.model.encoder.conv1.register_forward_hook(
         lambda m, inp, out: out.requires_grad_(True))
 
-    model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language=LANGUAGE, task=TASK)
     model.config.suppress_tokens = []
-    model.config.use_cache = False
 
     for param in model.parameters():
         param.requires_grad = False
@@ -159,7 +157,10 @@ def main():
                 labels = batch["labels"]
                 labels[labels == -100] = processor.tokenizer.pad_token_id
 
-                out = model.base_model.generate(feats, language=LANGUAGE, task=TASK, max_length=225)
+                mask = torch.ones(feats.shape[:2], device=device, dtype=torch.long)
+                out = model.base_model.generate(
+                    feats, attention_mask=mask,
+                    language=LANGUAGE, task=TASK, max_length=225)
                 preds.extend(processor.tokenizer.batch_decode(out, skip_special_tokens=True))
                 refs.extend(processor.tokenizer.batch_decode(labels, skip_special_tokens=True))
         model.train()
@@ -224,10 +225,7 @@ def main():
     # 合并
     if args.save_merged:
         print("\nMerging LoRA...")
-        base = WhisperForConditionalGeneration.from_pretrained(
-            args.model_dir,
-            torch_dtype=torch.float16 if device.type == "cuda" else torch.float32,
-            low_cpu_mem_usage=True)
+        base = WhisperForConditionalGeneration.from_pretrained(args.model_dir)
         m = PeftModel.from_pretrained(base, args.output_dir).merge_and_unload()
         merged_path = "./whisper-large-v3-zh-lora"
         m.save_pretrained(merged_path)
