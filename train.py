@@ -69,6 +69,8 @@ def main():
     p.add_argument("--eval_steps", type=int, default=500)
     p.add_argument("--max_samples", type=int, default=None)
     p.add_argument("--save_merged", action="store_true")
+    p.add_argument("--log_file", default="./training_log.jsonl",
+                   help="训练日志文件（JSONL 格式）")
     args = p.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -76,6 +78,12 @@ def main():
     if device.type == "cuda":
         print(f"GPU: {torch.cuda.get_device_name(0)} "
               f"({torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB)")
+
+    # 训练日志
+    log_f = open(args.log_file, "w", encoding="utf-8")
+    def write_log(entry: dict):
+        log_f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        log_f.flush()
 
     # Processor
     print(f"\nLoading processor from {args.model_dir}...")
@@ -171,6 +179,15 @@ def main():
             epoch_loss += loss.item()
             global_step += 1
 
+            # 记录每一步的训练 loss 和 lr
+            write_log({
+                "type": "train",
+                "step": global_step,
+                "epoch": epoch,
+                "loss": round(loss.item(), 6),
+                "lr": scheduler.get_last_lr()[0],
+            })
+
             if global_step % 50 == 0:
                 print(f"  step {global_step:5d} | loss {loss.item():.4f} | "
                       f"lr {scheduler.get_last_lr()[0]:.2e}")
@@ -179,6 +196,8 @@ def main():
                 wer = eval_wer()
                 print(f"  --- eval @ step {global_step} ---")
                 print(f"  WER: {wer:.4f}  (best: {best_wer:.4f})")
+                write_log({"type": "eval", "step": global_step, "epoch": epoch,
+                           "wer": round(wer, 6), "best_wer": round(min(wer, best_wer), 6)})
                 if wer < best_wer:
                     best_wer = wer
                     model.save_pretrained(args.output_dir)
@@ -190,6 +209,9 @@ def main():
         wer = eval_wer()
         print(f"\nEpoch {epoch}/{args.epochs} | loss {avg_loss:.4f} | "
               f"WER {wer:.4f} | time {elapsed:.0f}s")
+        write_log({"type": "eval", "step": global_step, "epoch": epoch,
+                   "wer": round(wer, 6), "best_wer": round(min(wer, best_wer), 6),
+                   "epoch_loss": round(avg_loss, 6)})
         if wer < best_wer:
             best_wer = wer
             model.save_pretrained(args.output_dir)
@@ -209,6 +231,8 @@ def main():
         processor.save_pretrained(merged_path)
         print(f"Merged -> {merged_path}")
 
+    log_f.close()
+    print(f"Log saved to {args.log_file}")
     print("Done!")
 
 
