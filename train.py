@@ -2,8 +2,7 @@
 LoRA 微调 Whisper-large-v3 — 中文游戏语音识别
 
 用法:
-    python train.py --save_merged
-    python train.py --epochs 10 --batch_size 8 --lr 1e-4
+    python train.py --save_merged --epochs 15 --batch_size 8 --lr 1e-4
 """
 import os, json, argparse, time, math
 from dataclasses import dataclass
@@ -59,7 +58,7 @@ def main():
     p.add_argument("--model_dir", default=MODEL_DIR)
     p.add_argument("--metadata", default="./metadata.jsonl")
     p.add_argument("--output_dir", default="./whisper-lora-checkpoint")
-    p.add_argument("--epochs", type=int, default=20)
+    p.add_argument("--epochs", type=int, default=15)
     p.add_argument("--batch_size", type=int, default=8)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--warmup_steps", type=int, default=200)
