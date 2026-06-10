@@ -73,7 +73,7 @@ def plot_dashboard(data: dict, output_dir: str):
     if len(data["train_loss"]) > 50:
         s, s_steps = smooth(data["train_loss"], window=50)
         ax_loss.plot(data["train_steps"][s_steps], s,
-                     color=C_TRAIN_S, linewidth=1.2, label="Train Loss (平滑)")
+                     color=C_TRAIN_S, linewidth=1.2, label="Train Loss (smoothed)")
     # 原始半透明
     ax_loss.plot(data["train_steps"], data["train_loss"],
                  color=C_TRAIN, linewidth=0.3, alpha=0.25)
@@ -179,7 +179,7 @@ def plot_loss_detail(data: dict, output_dir: str):
     if len(raw) > 50:
         s, s_steps = smooth(raw, window=100)
         ax.plot(data["train_steps"][s_steps], s,
-                color=C_TRAIN_S, linewidth=1.8, label="Train Loss (平滑, window=100)")
+                color=C_TRAIN_S, linewidth=1.8, label="Train Loss (smoothed, window=100)")
 
     # Eval loss
     if data["eval_loss"]:
